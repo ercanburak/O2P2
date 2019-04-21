@@ -1,5 +1,5 @@
 from torch.utils.data import Dataset
-from PIL import Image
+import cv2
 
 
 class O2P2Dataset(Dataset):
@@ -10,17 +10,17 @@ class O2P2Dataset(Dataset):
 
     def __getitem__(self, index):
         img0_path, img1_path, seg_paths = self.dataset[index]
-        img0 = Image.open(img0_path).convert('RGB')
-        img1 = Image.open(img1_path).convert('RGB')
+        img0 = cv2.imread(img0_path)
+        img1 = cv2.imread(img1_path)
         segs = []
         for seg_path in seg_paths:
-            seg = Image.open(seg_path).convert('RGB')
+            seg = cv2.imread(seg_path)
             segs.append(seg)
         if self.transform is not None:
             img0 = self.transform(img0)
             img1 = self.transform(img1)
-            for seg in segs:
-                seg = self.transform(seg)
+            for i, seg in enumerate(segs):
+                segs[i] = self.transform(seg)
         return img0, img1, segs
 
     def __len__(self):
