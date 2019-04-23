@@ -1,5 +1,6 @@
 import torch
 from torch.utils.data import DataLoader
+from torchvision.transforms import *
 from options.options import BaseOptions
 from util.logger import Logger
 import os.path as osp
@@ -19,10 +20,18 @@ def main():
     # Read and initialize dataset
     physNetData = PhysNetReal(opt.dataroot)
 
+    # Construct train and test transform operations
+    transform_train = Compose([
+        ToTensor(),
+    ])
+    transform_test = Compose([
+        ToTensor(),
+    ])
+
     # PyTorch Dataset classes for train, validation and test sets
-    train_dataset = O2P2Dataset(physNetData.train, transform=None)
-    val_dataset = O2P2Dataset(physNetData.val, transform=None)
-    test_dataset = O2P2Dataset(physNetData.test, transform=None)
+    train_dataset = O2P2Dataset(physNetData.train, transform=transform_train)
+    val_dataset = O2P2Dataset(physNetData.val, transform=transform_test)
+    test_dataset = O2P2Dataset(physNetData.test, transform=transform_test)
 
     # PyTorch Dataloaders for train, validation and test sets
     train_loader = DataLoader(train_dataset, batch_size=opt.train_batch_size, shuffle=True, pin_memory=use_gpu)
@@ -30,12 +39,16 @@ def main():
     test_loader = DataLoader(test_dataset, batch_size=opt.test_batch_size, shuffle=False, pin_memory=use_gpu)
 
     # Initialize model
-
-    # Define loss and optimizer
-    criterion = torch.nn.MSELoss()
     percept = Percept()
     physics = Physics()
     render = Render()
+    if use_gpu:
+        percept.cuda()
+        physics.cuda()
+        render.cuda()
+
+    # Define loss and optimizer
+    criterion = torch.nn.MSELoss()
     optimizer = torch.optim.Adam([{'params': percept.parameters()},
                                   {'params': physics.parameters()},
                                   {'params': render.parameters()}],
@@ -55,16 +68,18 @@ def main():
 
     logger.log("Training completed.")
 
+
 def print_train_stats(logger, epoch, elapsed_time, percept_loss, physics_loss, render_loss):
     """ Prints training details
     """
     logger.log('Epoch: [{0}]\t'
-        'Time {epoch_time:.1f}\t'
-        'Perception Loss {percept_loss:.4f}\t'
-        'Physics Loss {physics_loss:.3f} \t'
-        'Rendering Loss {render_loss:.4f}\t\t'.format(
-        epoch+1, epoch_time=elapsed_time, percept_loss=percept_loss,
-        physics_loss=physics_loss, render_loss=render_loss))
+               'Time {epoch_time:.1f}\t'    
+               'Perception Loss {percept_loss:.4f}\t'
+               'Physics Loss {physics_loss:.3f} \t' 
+               'Rendering Loss {render_loss:.4f}\t\t'.format(
+                    epoch+1, epoch_time=elapsed_time, percept_loss=percept_loss,
+                    physics_loss=physics_loss, render_loss=render_loss))
+
 
 def train(train_loader, percept, physics, render, criterion, optimizer, use_gpu):
     """ Train the model for one epoch.
@@ -81,15 +96,30 @@ def train(train_loader, percept, physics, render, criterion, optimizer, use_gpu)
             for i, seg in enumerate(segs):
                 segs[i] = seg.cuda()
 
-        # TODO: compute model output
+        # compute model output
+        objects = []
+        for seg in segs:
+            obj = percept(seg)
+            objects.append(obj)
 
-        # TODO: measure and record loss
-        percept_loss = 0
-        physics_loss = 0
-        render_loss = 0
+        img0_reconstruction = render(objects)
+        objects_evolved = physics(objects)
+        img1_reconstruction = render(objects_evolved)
+
+        # measure and record loss
+        # TODO: Perceptual loss with VGG will be added
+        percept_loss = criterion(img0, img0_reconstruction)
+        physics_loss = criterion(img1, img1_reconstruction)
+        render_loss = percept_loss + physics_loss
+
         # compute gradient and do optimizer step
+        optimizer.zero_grad()
+        render_loss.backward()
+        optimizer.step()
 
         return percept_loss, physics_loss, render_loss
 
+
 if __name__ == '__main__':
     main()
+
