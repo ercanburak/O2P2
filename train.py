@@ -48,6 +48,7 @@ def main():
         render.cuda()
 
     # Define loss and optimizer
+    # TODO: Different losses will be used to optimize different modules
     criterion = torch.nn.MSELoss()
     optimizer = torch.optim.Adam([{'params': percept.parameters()},
                                   {'params': physics.parameters()},
@@ -99,6 +100,7 @@ def train(train_loader, percept, physics, render, criterion, optimizer, use_gpu)
         # compute model output
         objects = []
         for seg in segs:
+            # TODO: objects from segs can be computed as a single batch
             obj = percept(seg)
             objects.append(obj)
 
@@ -113,6 +115,7 @@ def train(train_loader, percept, physics, render, criterion, optimizer, use_gpu)
         render_loss = percept_loss + physics_loss
 
         # compute gradient and do optimizer step
+        # TODO: Different losses will be used to optimize different modules
         optimizer.zero_grad()
         render_loss.backward()
         optimizer.step()
