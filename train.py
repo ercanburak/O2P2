@@ -16,9 +16,11 @@ def main():
     log_file = osp.join(opt.checkpoints_dir, "trainlog.txt")
     logger = Logger(log_file)
     use_gpu = torch.cuda.is_available()
+    torch.manual_seed(opt.seed);
+    torch.cuda.manual_seed_all(opt.seed)
 
     # Read and initialize dataset
-    physNetData = PhysNetReal(opt.dataroot)
+    phys_net_data = PhysNetReal(opt.dataroot)
 
     # Construct train and test transform operations
     transform_train = Compose([
@@ -29,9 +31,9 @@ def main():
     ])
 
     # PyTorch Dataset classes for train, validation and test sets
-    train_dataset = O2P2Dataset(physNetData.train, transform=transform_train)
-    val_dataset = O2P2Dataset(physNetData.val, transform=transform_test)
-    test_dataset = O2P2Dataset(physNetData.test, transform=transform_test)
+    train_dataset = O2P2Dataset(phys_net_data.train, transform=transform_train)
+    val_dataset = O2P2Dataset(phys_net_data.val, transform=transform_test)
+    test_dataset = O2P2Dataset(phys_net_data.test, transform=transform_test)
 
     # PyTorch Dataloaders for train, validation and test sets
     train_loader = DataLoader(train_dataset, batch_size=opt.train_batch_size, shuffle=True, pin_memory=use_gpu)

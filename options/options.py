@@ -24,6 +24,7 @@ class BaseOptions():
         self.parser.add_argument('--train_batch_size', type=int, default=1, help='training batch size')
         self.parser.add_argument('--test_batch_size', type=int, default=1, help='test batch size')
         self.parser.add_argument('--max-epoch', default=120, type=int, help="maximum epochs to run")
+        self.parser.add_argument('--seed', type=int, default=23, help='random seed')
         self.initialized = True
         
     def get_options(self):
