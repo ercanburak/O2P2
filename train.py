@@ -62,7 +62,7 @@ def main():
         start_time = time.time()
 
         # train for one epoch
-        percept_loss, physics_loss, render_loss = train(train_loader, percept, physics, render, criterion, optimizer, use_gpu)
+        percept_loss, physics_loss, render_loss = train(train_loader, percept, physics, render, criterion, optimizer, use_gpu, logger)
 
         elapsed_time = time.time() - start_time
 
@@ -84,7 +84,7 @@ def print_train_stats(logger, epoch, elapsed_time, percept_loss, physics_loss, r
                     physics_loss=physics_loss, render_loss=render_loss))
 
 
-def train(train_loader, percept, physics, render, criterion, optimizer, use_gpu):
+def train(train_loader, percept, physics, render, criterion, optimizer, use_gpu, logger):
     """ Train the model for one epoch.
     """
 
@@ -93,7 +93,11 @@ def train(train_loader, percept, physics, render, criterion, optimizer, use_gpu)
     physics.train()
     render.train()
 
-    for img0, img1, segs in train_loader:
+    percept_losses = []
+    physics_losses = []
+    render_losses = []
+
+    for batch_idx, (img0, img1, segs) in enumerate(train_loader):
         if use_gpu:
             img0, img1 = img0.cuda(), img1.cuda()
             for i, seg in enumerate(segs):
@@ -116,13 +120,31 @@ def train(train_loader, percept, physics, render, criterion, optimizer, use_gpu)
         physics_loss = criterion(img1, img1_reconstruction)
         render_loss = percept_loss + physics_loss
 
+        percept_losses.append(percept_loss)
+        physics_losses.append(physics_loss)
+        render_losses.append(render_loss)
+
         # compute gradient and do optimizer step
         # TODO: Different losses will be used to optimize different modules
         optimizer.zero_grad()
         render_loss.backward()
         optimizer.step()
 
-        return percept_loss, physics_loss, render_loss
+        print_freq = 10
+        if (batch_idx + 1) % print_freq == 0:
+            logger.log('Batch: [{0}/{1}]\t'
+                       'Perception Loss {percept_loss:.4f}\t'
+                       'Physics Loss {physics_loss:.3f} \t'
+                       'Rendering Loss {render_loss:.4f}\t\t'.format(
+                        batch_idx + 1, len(train_loader),
+                        percept_loss=percept_loss,
+                        physics_loss=physics_loss,
+                        render_loss=render_loss))
+
+    percept_loss = sum(percept_losses)/float(len(percept_losses))
+    physics_loss = sum(physics_losses) / float(len(physics_losses))
+    render_loss = sum(render_losses) / float(len(render_losses))
+    return percept_loss, physics_loss, render_loss
 
 
 if __name__ == '__main__':
