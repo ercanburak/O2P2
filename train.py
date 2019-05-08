@@ -1,4 +1,5 @@
 import torch
+import torchvision
 from torch.utils.data import DataLoader
 from torchvision.transforms import *
 from options.options import BaseOptions
@@ -132,6 +133,10 @@ def train(train_loader, percept, physics, render, criterion, optimizer, use_gpu,
 
         print_freq = 10
         if (batch_idx + 1) % print_freq == 0:
+            torchvision.utils.save_image(img0, 'img0.png')
+            torchvision.utils.save_image(img0_reconstruction, 'img0_reconstruction.png')
+            torchvision.utils.save_image(img1, 'img1.png')
+            torchvision.utils.save_image(img1_reconstruction, 'img1_reconstruction.png')
             logger.log('Batch: [{0}/{1}]\t'
                        'Perception Loss {percept_loss:.4f}\t'
                        'Physics Loss {physics_loss:.3f} \t'
