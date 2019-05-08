@@ -16,7 +16,7 @@ def main():
     log_file = osp.join(opt.checkpoints_dir, "trainlog.txt")
     logger = Logger(log_file)
     use_gpu = torch.cuda.is_available()
-    torch.manual_seed(opt.seed);
+    torch.manual_seed(opt.seed)
     torch.cuda.manual_seed_all(opt.seed)
 
     # Read and initialize dataset
