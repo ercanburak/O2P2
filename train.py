@@ -63,7 +63,7 @@ def main():
         start_time = time.time()
 
         # train for one epoch
-        percept_loss, physics_loss, render_loss = train(train_loader, percept, physics, render, criterion, optimizer, use_gpu, logger)
+        percept_loss, physics_loss, render_loss = train(epoch, train_loader, percept, physics, render, criterion, optimizer, use_gpu, logger)
 
         elapsed_time = time.time() - start_time
 
@@ -85,7 +85,7 @@ def print_train_stats(logger, epoch, elapsed_time, percept_loss, physics_loss, r
                     physics_loss=physics_loss, render_loss=render_loss))
 
 
-def train(train_loader, percept, physics, render, criterion, optimizer, use_gpu, logger):
+def train(epoch, train_loader, percept, physics, render, criterion, optimizer, use_gpu, logger):
     """ Train the model for one epoch.
     """
 
@@ -133,15 +133,15 @@ def train(train_loader, percept, physics, render, criterion, optimizer, use_gpu,
 
         print_freq = 10
         if (batch_idx + 1) % print_freq == 0:
-            torchvision.utils.save_image(img0, 'img0.png')
-            torchvision.utils.save_image(img0_reconstruction, 'img0_reconstruction.png')
-            torchvision.utils.save_image(img1, 'img1.png')
-            torchvision.utils.save_image(img1_reconstruction, 'img1_reconstruction.png')
-            logger.log('Batch: [{0}/{1}]\t'
+            torchvision.utils.save_image(img0, 'epoch{}_img0.png'.format(epoch+1, '03'))
+            torchvision.utils.save_image(img0_reconstruction, 'epoch{}_img0_reconstruction.png'.format(epoch + 1, '03'))
+            torchvision.utils.save_image(img1, 'epoch{}_img1.png'.format(epoch + 1, '03'))
+            torchvision.utils.save_image(img1_reconstruction, 'epoch{}_img1_reconstruction.png'.format(epoch + 1, '03'))
+            logger.log('Epoch: [{0}][{1}/{2}]\t'
                        'Perception Loss {percept_loss:.4f}\t'
                        'Physics Loss {physics_loss:.3f} \t'
                        'Rendering Loss {render_loss:.4f}\t\t'.format(
-                        batch_idx + 1, len(train_loader),
+                        epoch+1, batch_idx + 1, len(train_loader),
                         percept_loss=percept_loss,
                         physics_loss=physics_loss,
                         render_loss=render_loss))
