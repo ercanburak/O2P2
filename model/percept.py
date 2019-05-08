@@ -35,8 +35,8 @@ class Percept(torch.nn.Module):
 
         self.convnet = nn.Sequential(self.conv1, self.conv2, self.conv3, self.conv4)
 
-    def forward(self, input):
-        output = self.convnet(input)
+    def forward(self, seg):
+        output = self.convnet(seg)
         output = output.view(-1, self.fc_input_size)
         output = self.fcnet(output)
         return output
