@@ -70,6 +70,10 @@ def main():
         # print training details
         print_train_stats(logger, epoch, elapsed_time, percept_loss, physics_loss, render_loss)
 
+        eval_freq = 10
+        if (epoch + 1) % eval_freq == 0:
+            validate(epoch, val_loader, percept, physics, render, criterion, use_gpu, logger)
+
     logger.log("Training completed.")
 
 
@@ -151,6 +155,65 @@ def train(epoch, train_loader, percept, physics, render, criterion, optimizer, u
     render_loss = sum(render_losses) / float(len(render_losses))
     return percept_loss, physics_loss, render_loss
 
+
+def validate(epoch, val_loader, percept, physics, render, criterion, use_gpu, logger):
+    """ Validates the current model (with validation set).
+    """
+
+    # switch to evaluate mode
+    percept.eval()
+    physics.eval()
+    render.eval()
+
+    percept_losses = []
+    physics_losses = []
+    render_losses = []
+
+    with torch.no_grad():
+        for batch_idx, (img0, img1, segs) in enumerate(val_loader):
+            if use_gpu:
+                img0, img1 = img0.cuda(), img1.cuda()
+                for i, seg in enumerate(segs):
+                    segs[i] = seg.cuda()
+
+            # compute model output
+            objects = []
+            for seg in segs:
+                # TODO: objects from segs can be computed as a single batch
+                obj = percept(seg)
+                objects.append(obj)
+
+            img0_reconstruction = render(objects)
+            objects_evolved = physics(objects)
+            img1_reconstruction = render(objects_evolved)
+
+            # measure and record loss
+            # TODO: Perceptual loss with VGG will be added
+            percept_loss = criterion(img0, img0_reconstruction)
+            physics_loss = criterion(img1, img1_reconstruction)
+            render_loss = percept_loss + physics_loss
+
+            percept_losses.append(percept_loss)
+            physics_losses.append(physics_loss)
+            render_losses.append(render_loss)
+
+            torchvision.utils.save_image(img0, 'val{}_img0.png'.format(batch_idx+1, '03'))
+            torchvision.utils.save_image(img0_reconstruction, 'val{}_img0_reconstruction.png'.format(batch_idx + 1, '03'))
+            torchvision.utils.save_image(img1, 'val{}_img1.png'.format(batch_idx + 1, '03'))
+            torchvision.utils.save_image(img1_reconstruction, 'val{}_img1_reconstruction.png'.format(batch_idx + 1, '03'))
+
+        percept_loss = sum(percept_losses) / float(len(percept_losses))
+        physics_loss = sum(physics_losses) / float(len(physics_losses))
+        render_loss = sum(render_losses) / float(len(render_losses))
+
+        logger.log('Epoch: [{0}]\t'
+                   'Perception Validetion Loss {percept_loss:.4f}\t'
+                   'Physics Validetion Loss {physics_loss:.3f} \t'
+                   'Rendering Validetion Loss {render_loss:.4f}\t\t'.format(
+                            epoch + 1,
+                            percept_loss=percept_loss,
+                            physics_loss=physics_loss,
+                            render_loss=render_loss))
 
 if __name__ == '__main__':
     main()
