@@ -12,6 +12,7 @@ from model.physics import Physics
 from model.render import Render
 import time
 
+
 def main():
     opt = BaseOptions().parse()   # get options
     log_file = osp.join(opt.checkpoints_dir, "trainlog.txt")
@@ -51,19 +52,19 @@ def main():
         render.cuda()
 
     # Define loss and optimizer
-    # TODO: Different losses will be used to optimize different modules
-    criterion = torch.nn.MSELoss()
-    optimizer = torch.optim.Adam([{'params': percept.parameters()},
-                                  {'params': physics.parameters()},
-                                  {'params': render.parameters()}],
-                                 lr=1e-3)
+    # TODO:Perceptual loss (VGG loss) will be added
+    criterion_l2 = torch.nn.MSELoss()
+    optim_percept = torch.optim.Adam(percept.parameters(), lr=1e-3)
+    optim_physics = torch.optim.Adam(physics.parameters(), lr=1e-3)
+    optim_render = torch.optim.Adam(render.parameters(), lr=1e-3)
 
     # Start training
     for epoch in range(opt.max_epoch):
         start_time = time.time()
 
         # train for one epoch
-        percept_loss, physics_loss, render_loss = train(epoch, train_loader, percept, physics, render, criterion, optimizer, use_gpu, logger)
+        percept_loss, physics_loss, render_loss = train(epoch, train_loader, percept, physics, render, criterion_l2,
+                                                        optim_percept, optim_physics, optim_render, use_gpu, logger)
 
         elapsed_time = time.time() - start_time
 
@@ -72,7 +73,7 @@ def main():
 
         eval_freq = 10
         if (epoch + 1) % eval_freq == 0:
-            validate(epoch, val_loader, percept, physics, render, criterion, use_gpu, logger)
+            validate(epoch, val_loader, percept, physics, render, criterion_l2, use_gpu, logger)
 
     logger.log("Training completed.")
 
@@ -89,7 +90,8 @@ def print_train_stats(logger, epoch, elapsed_time, percept_loss, physics_loss, r
                     physics_loss=physics_loss, render_loss=render_loss))
 
 
-def train(epoch, train_loader, percept, physics, render, criterion, optimizer, use_gpu, logger):
+def train(epoch, train_loader, percept, physics, render, criterion,
+          optim_percept, optim_physics, optim_render, use_gpu, logger):
     """ Train the model for one epoch.
     """
 
@@ -129,18 +131,31 @@ def train(epoch, train_loader, percept, physics, render, criterion, optimizer, u
         physics_losses.append(physics_loss)
         render_losses.append(render_loss)
 
-        # compute gradient and do optimizer step
-        # TODO: Different losses will be used to optimize different modules
-        optimizer.zero_grad()
+        # compute gradient and do optimizer step for percept module
+        optim_percept.zero_grad()
+        percept_loss.backward(retain_graph=True)
+        optim_percept.step()
+
+        # compute gradient and do optimizer step for physics module
+        optim_physics.zero_grad()
+        physics_loss.backward(retain_graph=True)
+        optim_physics.step()
+
+        # compute gradient and do optimizer step for render module
+        optim_render.zero_grad()
         render_loss.backward()
-        optimizer.step()
+        optim_render.step()
+
+        percept_loss = sum(percept_losses) / float(len(percept_losses))
+        physics_loss = sum(physics_losses) / float(len(physics_losses))
+        render_loss = sum(render_losses) / float(len(render_losses))
 
         print_freq = 10
         if (batch_idx + 1) % print_freq == 0:
-            torchvision.utils.save_image(img0, 'epoch{}_img0.png'.format(epoch+1, '03'))
-            torchvision.utils.save_image(img0_reconstruction, 'epoch{}_img0_reconstruction.png'.format(epoch + 1, '03'))
-            torchvision.utils.save_image(img1, 'epoch{}_img1.png'.format(epoch + 1, '03'))
-            torchvision.utils.save_image(img1_reconstruction, 'epoch{}_img1_reconstruction.png'.format(epoch + 1, '03'))
+            # torchvision.utils.save_image(img0, 'epoch{}_img0.png'.format(epoch+1, '03'))
+            # torchvision.utils.save_image(img0_reconstruction, 'epoch{}_img0_reconstruction.png'.format(epoch + 1, '03'))
+            # torchvision.utils.save_image(img1, 'epoch{}_img1.png'.format(epoch + 1, '03'))
+            # torchvision.utils.save_image(img1_reconstruction, 'epoch{}_img1_reconstruction.png'.format(epoch + 1, '03'))
             logger.log('Epoch: [{0}][{1}/{2}]\t'
                        'Perception Loss {percept_loss:.4f}\t'
                        'Physics Loss {physics_loss:.3f} \t'
@@ -150,9 +165,6 @@ def train(epoch, train_loader, percept, physics, render, criterion, optimizer, u
                         physics_loss=physics_loss,
                         render_loss=render_loss))
 
-    percept_loss = sum(percept_losses)/float(len(percept_losses))
-    physics_loss = sum(physics_losses) / float(len(physics_losses))
-    render_loss = sum(render_losses) / float(len(render_losses))
     return percept_loss, physics_loss, render_loss
 
 
