@@ -10,6 +10,7 @@ from data.dataset import O2P2Dataset
 from model.percept import Percept
 from model.physics import Physics
 from model.render import Render
+from loss.vgg import Vgg16
 import time
 
 
@@ -51,9 +52,13 @@ def main():
         physics.cuda()
         render.cuda()
 
-    # Define loss and optimizer
-    # TODO:Perceptual loss (VGG loss) will be added
-    criterion_l2 = torch.nn.MSELoss()
+    # Initialize pretrained vgg model for perceptual loss
+    vgg = Vgg16(requires_grad=False)
+    if use_gpu:
+        vgg.cuda()
+
+    # Define loss and optimizers
+    criterion = torch.nn.MSELoss()
     optim_percept = torch.optim.Adam(percept.parameters(), lr=1e-3)
     optim_physics = torch.optim.Adam(physics.parameters(), lr=1e-3)
     optim_render = torch.optim.Adam(render.parameters(), lr=1e-3)
@@ -63,8 +68,9 @@ def main():
         start_time = time.time()
 
         # train for one epoch
-        percept_loss, physics_loss, render_loss = train(epoch, train_loader, percept, physics, render, criterion_l2,
-                                                        optim_percept, optim_physics, optim_render, use_gpu, logger)
+        percept_loss, physics_loss, render_loss = train(epoch, train_loader, percept, physics, render, criterion,
+                                                        vgg, optim_percept, optim_physics, optim_render,
+                                                        use_gpu, logger)
 
         elapsed_time = time.time() - start_time
 
@@ -73,7 +79,7 @@ def main():
 
         eval_freq = 10
         if (epoch + 1) % eval_freq == 0:
-            validate(epoch, val_loader, percept, physics, render, criterion_l2, use_gpu, logger)
+            validate(epoch, val_loader, percept, physics, render, criterion, vgg, use_gpu, logger)
 
     logger.log("Training completed.")
 
@@ -90,7 +96,7 @@ def print_train_stats(logger, epoch, elapsed_time, percept_loss, physics_loss, r
                     physics_loss=physics_loss, render_loss=render_loss))
 
 
-def train(epoch, train_loader, percept, physics, render, criterion,
+def train(epoch, train_loader, percept, physics, render, criterion, vgg,
           optim_percept, optim_physics, optim_render, use_gpu, logger):
     """ Train the model for one epoch.
     """
@@ -121,10 +127,23 @@ def train(epoch, train_loader, percept, physics, render, criterion,
         objects_evolved = physics(objects)
         img1_reconstruction = render(objects_evolved)
 
-        # measure and record loss
-        # TODO: Perceptual loss with VGG will be added
-        percept_loss = criterion(img0, img0_reconstruction)
-        physics_loss = criterion(img1, img1_reconstruction)
+        # measure l2 losses
+        percept_loss_l2 = criterion(img0, img0_reconstruction)
+        physics_loss_l2 = criterion(img1, img1_reconstruction)
+
+        # get vgg features for perceptual loss
+        img0_vgg_features = vgg(img0).relu2_2
+        img0_reconstruction_vgg_features = vgg(img0_reconstruction).relu2_2
+        img1_vgg_features = vgg(img1).relu2_2
+        img1_reconstruction_vgg_features = vgg(img1_reconstruction).relu2_2
+
+        # measure perceptual losses
+        percept_loss_perceptual = criterion(img0_vgg_features, img0_reconstruction_vgg_features)
+        physics_loss_perceptual = criterion(img1_vgg_features, img1_reconstruction_vgg_features)
+
+        # calculate final losses
+        percept_loss = percept_loss_l2 + percept_loss_perceptual
+        physics_loss = physics_loss_l2 + physics_loss_perceptual
         render_loss = percept_loss + physics_loss
 
         percept_losses.append(percept_loss)
@@ -152,10 +171,6 @@ def train(epoch, train_loader, percept, physics, render, criterion,
 
         print_freq = 10
         if (batch_idx + 1) % print_freq == 0:
-            # torchvision.utils.save_image(img0, 'epoch{}_img0.png'.format(epoch+1, '03'))
-            # torchvision.utils.save_image(img0_reconstruction, 'epoch{}_img0_reconstruction.png'.format(epoch + 1, '03'))
-            # torchvision.utils.save_image(img1, 'epoch{}_img1.png'.format(epoch + 1, '03'))
-            # torchvision.utils.save_image(img1_reconstruction, 'epoch{}_img1_reconstruction.png'.format(epoch + 1, '03'))
             logger.log('Epoch: [{0}][{1}/{2}]\t'
                        'Perception Loss {percept_loss:.4f}\t'
                        'Physics Loss {physics_loss:.3f} \t'
@@ -164,11 +179,16 @@ def train(epoch, train_loader, percept, physics, render, criterion,
                         percept_loss=percept_loss,
                         physics_loss=physics_loss,
                         render_loss=render_loss))
+        if (batch_idx + 1) == len(train_loader):
+            torchvision.utils.save_image(img0, 'epoch{}_img0.png'.format(epoch+1, '03'))
+            torchvision.utils.save_image(img0_reconstruction, 'epoch{}_img0_reconstruction.png'.format(epoch+1, '03'))
+            torchvision.utils.save_image(img1, 'epoch{}_img1.png'.format(epoch+1, '03'))
+            torchvision.utils.save_image(img1_reconstruction, 'epoch{}_img1_reconstruction.png'.format(epoch+1, '03'))
 
     return percept_loss, physics_loss, render_loss
 
 
-def validate(epoch, val_loader, percept, physics, render, criterion, use_gpu, logger):
+def validate(epoch, val_loader, percept, physics, render, criterion, vgg, use_gpu, logger):
     """ Validates the current model (with validation set).
     """
 
@@ -199,16 +219,31 @@ def validate(epoch, val_loader, percept, physics, render, criterion, use_gpu, lo
             objects_evolved = physics(objects)
             img1_reconstruction = render(objects_evolved)
 
-            # measure and record loss
-            # TODO: Perceptual loss with VGG will be added
-            percept_loss = criterion(img0, img0_reconstruction)
-            physics_loss = criterion(img1, img1_reconstruction)
+            # measure l2 losses
+            percept_loss_l2 = criterion(img0, img0_reconstruction)
+            physics_loss_l2 = criterion(img1, img1_reconstruction)
+
+            # get vgg features for perceptual loss
+            img0_vgg_features = vgg(img0).relu2_2
+            img0_reconstruction_vgg_features = vgg(img0_reconstruction).relu2_2
+            img1_vgg_features = vgg(img1).relu2_2
+            img1_reconstruction_vgg_features = vgg(img1_reconstruction).relu2_2
+
+            # measure perceptual losses
+            percept_loss_perceptual = criterion(img0_vgg_features, img0_reconstruction_vgg_features)
+            physics_loss_perceptual = criterion(img1_vgg_features, img1_reconstruction_vgg_features)
+
+            # calculate final losses
+            percept_loss = percept_loss_l2 + percept_loss_perceptual
+            physics_loss = physics_loss_l2 + physics_loss_perceptual
             render_loss = percept_loss + physics_loss
 
+            # record losses
             percept_losses.append(percept_loss)
             physics_losses.append(physics_loss)
             render_losses.append(render_loss)
 
+            # save validation images for qualitative analysis
             torchvision.utils.save_image(img0, 'val{}_img0.png'.format(batch_idx+1, '03'))
             torchvision.utils.save_image(img0_reconstruction, 'val{}_img0_reconstruction.png'.format(batch_idx + 1, '03'))
             torchvision.utils.save_image(img1, 'val{}_img1.png'.format(batch_idx + 1, '03'))
