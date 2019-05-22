@@ -30,9 +30,13 @@ def main():
     # Construct train and test transform operations
     transform_train = Compose([
         ToTensor(),
+        Normalize(mean=[0.485, 0.456, 0.406],
+                  std=[0.229, 0.224, 0.225])
     ])
     transform_test = Compose([
         ToTensor(),
+        Normalize(mean=[0.485, 0.456, 0.406],
+                  std=[0.229, 0.224, 0.225])
     ])
 
     # PyTorch Dataset classes for train, validation and test sets
@@ -56,6 +60,7 @@ def main():
 
     # Initialize pretrained vgg model for perceptual loss
     vgg = Vgg16(requires_grad=False)
+    vgg.eval()
     if use_gpu:
         vgg.cuda()
 
