@@ -4,6 +4,7 @@ from torch.utils.data import DataLoader
 from torchvision.transforms import *
 from options.options import BaseOptions
 from util.logger import Logger
+from util.filesystem import mkdir
 import os.path as osp
 from data.physNetReal import PhysNetReal
 from data.dataset import O2P2Dataset
@@ -16,7 +17,8 @@ import time
 
 def main():
     opt = BaseOptions().parse()   # get options
-    log_file = osp.join(opt.checkpoints_dir, "trainlog.txt")
+    exp_dir = osp.join(opt.checkpoints_dir, opt.name)
+    log_file = osp.join(exp_dir, "trainlog.txt")
     logger = Logger(log_file)
     use_gpu = torch.cuda.is_available()
     torch.manual_seed(opt.seed)
@@ -70,7 +72,7 @@ def main():
         # train for one epoch
         percept_loss, physics_loss, render_loss = train(epoch, train_loader, percept, physics, render, criterion,
                                                         vgg, optim_percept, optim_physics, optim_render,
-                                                        use_gpu, logger)
+                                                        use_gpu, exp_dir, logger)
 
         elapsed_time = time.time() - start_time
 
@@ -79,7 +81,7 @@ def main():
 
         eval_freq = 10
         if (epoch + 1) % eval_freq == 0:
-            validate(epoch, val_loader, percept, physics, render, criterion, vgg, use_gpu, logger)
+            validate(epoch, val_loader, percept, physics, render, criterion, vgg, use_gpu, exp_dir, logger)
 
     logger.log("Training completed.")
 
@@ -97,7 +99,7 @@ def print_train_stats(logger, epoch, elapsed_time, percept_loss, physics_loss, r
 
 
 def train(epoch, train_loader, percept, physics, render, criterion, vgg,
-          optim_percept, optim_physics, optim_render, use_gpu, logger):
+          optim_percept, optim_physics, optim_render, use_gpu, exp_dir, logger):
     """ Train the model for one epoch.
     """
 
@@ -179,16 +181,28 @@ def train(epoch, train_loader, percept, physics, render, criterion, vgg,
                         percept_loss=percept_loss,
                         physics_loss=physics_loss,
                         render_loss=render_loss))
+
+        # save training images of a scene from last batch of epoch, for qualitative analysis
         if (batch_idx + 1) == len(train_loader):
-            torchvision.utils.save_image(img0, 'epoch{}_img0.png'.format(epoch+1, '03'))
-            torchvision.utils.save_image(img0_reconstruction, 'epoch{}_img0_reconstruction.png'.format(epoch+1, '03'))
-            torchvision.utils.save_image(img1, 'epoch{}_img1.png'.format(epoch+1, '03'))
-            torchvision.utils.save_image(img1_reconstruction, 'epoch{}_img1_reconstruction.png'.format(epoch+1, '03'))
+            img0_name = 'epoch{}_img0.png'.format(epoch+1, '03')
+            img0_recon_name = 'epoch{}_img0_reconstruction.png'.format(epoch+1, '03')
+            img1_name = 'epoch{}_img1.png'.format(epoch+1, '03')
+            img1_recon_name = 'epoch{}_img1_reconstruction.png'.format(epoch+1, '03')
+            train_images_dir = osp.join(exp_dir, "train_images")
+            mkdir(train_images_dir)
+            img0_path = osp.join(train_images_dir, img0_name)
+            img0_recon_path = osp.join(train_images_dir, img0_recon_name)
+            img1_path = osp.join(train_images_dir, img1_name)
+            img1_recon_path = osp.join(train_images_dir, img1_recon_name)
+            torchvision.utils.save_image(img0, img0_path)
+            torchvision.utils.save_image(img0_reconstruction, img0_recon_path)
+            torchvision.utils.save_image(img1, img1_path)
+            torchvision.utils.save_image(img1_reconstruction, img1_recon_path)
 
     return percept_loss, physics_loss, render_loss
 
 
-def validate(epoch, val_loader, percept, physics, render, criterion, vgg, use_gpu, logger):
+def validate(epoch, val_loader, percept, physics, render, criterion, vgg, use_gpu, exp_dir, logger):
     """ Validates the current model (with validation set).
     """
 
@@ -244,10 +258,21 @@ def validate(epoch, val_loader, percept, physics, render, criterion, vgg, use_gp
             render_losses.append(render_loss)
 
             # save validation images for qualitative analysis
-            torchvision.utils.save_image(img0, 'val{}_img0.png'.format(batch_idx+1, '03'))
-            torchvision.utils.save_image(img0_reconstruction, 'val{}_img0_reconstruction.png'.format(batch_idx + 1, '03'))
-            torchvision.utils.save_image(img1, 'val{}_img1.png'.format(batch_idx + 1, '03'))
-            torchvision.utils.save_image(img1_reconstruction, 'val{}_img1_reconstruction.png'.format(batch_idx + 1, '03'))
+
+            img0_name = 'val{}_img0.png'.format(batch_idx+1, '03')
+            img0_recon_name = 'val{}_img0_reconstruction.png'.format(batch_idx + 1, '03')
+            img1_name = 'val{}_img1.png'.format(batch_idx + 1, '03')
+            img1_recon_name = 'val{}_img1_reconstruction.png'.format(batch_idx + 1, '03')
+            val_images_dir = osp.join(exp_dir, "val_images")
+            mkdir(val_images_dir)
+            img0_path = osp.join(val_images_dir, img0_name)
+            img0_recon_path = osp.join(val_images_dir, img0_recon_name)
+            img1_path = osp.join(val_images_dir, img1_name)
+            img1_recon_path = osp.join(val_images_dir, img1_recon_name)
+            torchvision.utils.save_image(img0, img0_path)
+            torchvision.utils.save_image(img0_reconstruction, img0_recon_path)
+            torchvision.utils.save_image(img1, img1_path)
+            torchvision.utils.save_image(img1_reconstruction, img1_recon_path)
 
         percept_loss = sum(percept_losses) / float(len(percept_losses))
         physics_loss = sum(physics_losses) / float(len(physics_losses))
