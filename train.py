@@ -91,7 +91,7 @@ def main():
         # train for one epoch
         percept_loss, physics_loss, render_loss = train(epoch, train_loader, percept, physics, render, criterion,
                                                         vgg, vgg_norm, optim_percept, optim_physics, optim_render,
-                                                        use_gpu, exp_dir, logger)
+                                                        use_gpu, exp_dir, logger, opt)
 
         elapsed_time = time.time() - start_time
 
@@ -100,7 +100,7 @@ def main():
 
         if (epoch + 1) % opt.eval_freq == 0:
             percept_loss, physics_loss, render_loss = validate(epoch, val_loader, percept, physics, render, criterion,
-                     vgg, vgg_norm, use_gpu, exp_dir, logger)
+                     vgg, vgg_norm, use_gpu, exp_dir, logger, opt)
 
             is_best = render_loss < best_render_loss
             if is_best:
@@ -135,7 +135,7 @@ def print_train_stats(logger, epoch, elapsed_time, percept_loss, physics_loss, r
 
 def train(epoch, train_loader, percept, physics, render, criterion, vgg,
           vgg_norm, optim_percept, optim_physics, optim_render,
-          use_gpu, exp_dir, logger):
+          use_gpu, exp_dir, logger, opt):
     """ Train the model for one epoch.
     """
 
@@ -169,15 +169,19 @@ def train(epoch, train_loader, percept, physics, render, criterion, vgg,
         percept_loss_l2 = criterion(img0, img0_reconstruction)
         physics_loss_l2 = criterion(img1, img1_reconstruction)
 
-        # get vgg features for perceptual loss
-        img0_vgg_features = vgg(vgg_norm(img0)).relu2_2
-        img0_reconstruction_vgg_features = vgg(vgg_norm(img0_reconstruction)).relu2_2
-        img1_vgg_features = vgg(vgg_norm(img1)).relu2_2
-        img1_reconstruction_vgg_features = vgg(vgg_norm(img1_reconstruction)).relu2_2
+        if opt.use_perceptual_loss:
+            # get vgg features for perceptual loss
+            img0_vgg_features = vgg(vgg_norm(img0)).relu2_2
+            img0_reconstruction_vgg_features = vgg(vgg_norm(img0_reconstruction)).relu2_2
+            img1_vgg_features = vgg(vgg_norm(img1)).relu2_2
+            img1_reconstruction_vgg_features = vgg(vgg_norm(img1_reconstruction)).relu2_2
 
-        # measure perceptual losses
-        percept_loss_perceptual = criterion(img0_vgg_features, img0_reconstruction_vgg_features)
-        physics_loss_perceptual = criterion(img1_vgg_features, img1_reconstruction_vgg_features)
+            # measure perceptual losses
+            percept_loss_perceptual = criterion(img0_vgg_features, img0_reconstruction_vgg_features)
+            physics_loss_perceptual = criterion(img1_vgg_features, img1_reconstruction_vgg_features)
+        else:
+            percept_loss_perceptual = 0
+            physics_loss_perceptual = 0
 
         # calculate final losses
         percept_loss = percept_loss_l2 + percept_loss_perceptual
@@ -238,7 +242,7 @@ def train(epoch, train_loader, percept, physics, render, criterion, vgg,
     return percept_loss, physics_loss, render_loss
 
 
-def validate(epoch, val_loader, percept, physics, render, criterion, vgg, vgg_norm, use_gpu, exp_dir, logger):
+def validate(epoch, val_loader, percept, physics, render, criterion, vgg, vgg_norm, use_gpu, exp_dir, logger, opt):
     """ Validates the current model (with validation set).
     """
 
@@ -273,15 +277,19 @@ def validate(epoch, val_loader, percept, physics, render, criterion, vgg, vgg_no
             percept_loss_l2 = criterion(img0, img0_reconstruction)
             physics_loss_l2 = criterion(img1, img1_reconstruction)
 
-            # get vgg features for perceptual loss
-            img0_vgg_features = vgg(vgg_norm(img0)).relu2_2
-            img0_reconstruction_vgg_features = vgg(vgg_norm(img0_reconstruction)).relu2_2
-            img1_vgg_features = vgg(vgg_norm(img1)).relu2_2
-            img1_reconstruction_vgg_features = vgg(vgg_norm(img1_reconstruction)).relu2_2
+            if opt.use_perceptual_loss:
+                # get vgg features for perceptual loss
+                img0_vgg_features = vgg(vgg_norm(img0)).relu2_2
+                img0_reconstruction_vgg_features = vgg(vgg_norm(img0_reconstruction)).relu2_2
+                img1_vgg_features = vgg(vgg_norm(img1)).relu2_2
+                img1_reconstruction_vgg_features = vgg(vgg_norm(img1_reconstruction)).relu2_2
 
-            # measure perceptual losses
-            percept_loss_perceptual = criterion(img0_vgg_features, img0_reconstruction_vgg_features)
-            physics_loss_perceptual = criterion(img1_vgg_features, img1_reconstruction_vgg_features)
+                # measure perceptual losses
+                percept_loss_perceptual = criterion(img0_vgg_features, img0_reconstruction_vgg_features)
+                physics_loss_perceptual = criterion(img1_vgg_features, img1_reconstruction_vgg_features)
+            else:
+                percept_loss_perceptual = 0
+                physics_loss_perceptual = 0
 
             # calculate final losses
             percept_loss = percept_loss_l2 + percept_loss_perceptual
