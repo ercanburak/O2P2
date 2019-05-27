@@ -1,6 +1,7 @@
-import shutil
 import os.path as osp
 import os
+import errno
+
 
 def mkdir(directory):
     if not osp.exists(directory):

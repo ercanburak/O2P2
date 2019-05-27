@@ -3,7 +3,7 @@ import os
 from util import filesystem
 
 
-class BaseOptions():
+class BaseOptions:
     """This class defines options used during both training and test time.
     """
     def __init__(self):
@@ -13,17 +13,16 @@ class BaseOptions():
         self.parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     
     def initialize(self):
-        self.parser.add_argument('--name', type=str, default='experiment_name', 
-            help='name of the experiment. It decides where to store samples and models')
-        self.parser.add_argument('--notes', type=str, default='', 
-            help="any notes to add log path")        
-        self.parser.add_argument('--checkpoints_dir', type=str, default='./checkpoints', 
-            help='models are saved here')
+        self.parser.add_argument('--name', type=str, default='experiment_name',
+                                 help='name of the experiment. It decides where to store samples and models')
+        self.parser.add_argument('--checkpoints_dir', type=str, default='./checkpoints',
+                                 help='models are saved here')
         self.parser.add_argument('--dataroot', default='./datasets/PhysNetReal',
-                            help='path to images (should have subfolders first, last, mask, segment)')
+                                 help='path to images (should have subfolders first, last, mask, segment)')
         self.parser.add_argument('--train_batch_size', type=int, default=1, help='training batch size')
         self.parser.add_argument('--test_batch_size', type=int, default=1, help='test batch size')
         self.parser.add_argument('--max-epoch', default=120, type=int, help="maximum epochs to run")
+        self.parser.add_argument('--eval-freq', default=1, type=int, help="evaluation frequency")
         self.parser.add_argument('--seed', type=int, default=23, help='random seed')
         self.initialized = True
         

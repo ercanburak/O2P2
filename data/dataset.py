@@ -1,6 +1,7 @@
 from torch.utils.data import Dataset
 import cv2
 
+
 class O2P2Dataset(Dataset):
 
     def __init__(self, dataset, transform=None):

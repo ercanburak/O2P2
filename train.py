@@ -2,9 +2,11 @@ import torch
 import torchvision
 from torch.utils.data import DataLoader
 from torchvision.transforms import *
+import numpy as np
 from options.options import BaseOptions
 from util.logger import Logger
 from util.filesystem import mkdir
+from util.checkpoint import save_checkpoint
 import os.path as osp
 from data.physNetReal import PhysNetReal
 from data.dataset import O2P2Dataset
@@ -78,6 +80,10 @@ def main():
     optim_physics = torch.optim.Adam(physics.parameters(), lr=1e-3)
     optim_render = torch.optim.Adam(render.parameters(), lr=1e-3)
 
+    best_render_loss = np.inf
+    best_epoch = 0
+    print("==> Start training")
+
     # Start training
     for epoch in range(opt.max_epoch):
         start_time = time.time()
@@ -92,11 +98,26 @@ def main():
         # print training details
         print_train_stats(logger, epoch, elapsed_time, percept_loss, physics_loss, render_loss)
 
-        eval_freq = 10
-        if (epoch + 1) % eval_freq == 0:
-            validate(epoch, val_loader, percept, physics, render, criterion,
+        if (epoch + 1) % opt.eval_freq == 0:
+            percept_loss, physics_loss, render_loss = validate(epoch, val_loader, percept, physics, render, criterion,
                      vgg, vgg_norm, use_gpu, exp_dir, logger)
 
+            is_best = render_loss < best_render_loss
+            if is_best:
+                best_render_loss = render_loss
+                best_epoch = epoch + 1
+
+            percept_state_dict = percept.state_dict()
+            physics_state_dict = physics.state_dict()
+            render_state_dict = render.state_dict()
+            save_checkpoint({
+                'percept_state_dict': percept_state_dict,
+                'physics_state_dict': physics_state_dict,
+                'render_state_dict': render_state_dict,
+                'epoch': epoch,
+            }, is_best, osp.join(exp_dir, 'checkpoint_ep' + str(epoch + 1) + '.pth.tar'))
+
+    logger.log("==> Best Render Loss {:.4%}, achieved at epoch {}".format(best_render_loss, best_epoch))
     logger.log("Training completed.")
 
 
@@ -278,7 +299,7 @@ def validate(epoch, val_loader, percept, physics, render, criterion, vgg, vgg_no
             img0_recon_name = 'val{}_img0_reconstruction.png'.format(batch_idx + 1, '03')
             img1_name = 'val{}_img1.png'.format(batch_idx + 1, '03')
             img1_recon_name = 'val{}_img1_reconstruction.png'.format(batch_idx + 1, '03')
-            val_images_dir = osp.join(exp_dir, "val_images")
+            val_images_dir = osp.join(exp_dir, "val_images_epoch_{}".format(epoch + 1))
             mkdir(val_images_dir)
             img0_path = osp.join(val_images_dir, img0_name)
             img0_recon_path = osp.join(val_images_dir, img0_recon_name)
@@ -289,18 +310,21 @@ def validate(epoch, val_loader, percept, physics, render, criterion, vgg, vgg_no
             torchvision.utils.save_image(img1, img1_path)
             torchvision.utils.save_image(img1_reconstruction, img1_recon_path)
 
-        percept_loss = sum(percept_losses) / float(len(percept_losses))
-        physics_loss = sum(physics_losses) / float(len(physics_losses))
-        render_loss = sum(render_losses) / float(len(render_losses))
+    percept_loss = sum(percept_losses) / float(len(percept_losses))
+    physics_loss = sum(physics_losses) / float(len(physics_losses))
+    render_loss = sum(render_losses) / float(len(render_losses))
 
-        logger.log('Epoch: [{0}]\t'
-                   'Perception Validetion Loss {percept_loss:.4f}\t'
-                   'Physics Validetion Loss {physics_loss:.3f} \t'
-                   'Rendering Validetion Loss {render_loss:.4f}\t\t'.format(
-                            epoch + 1,
-                            percept_loss=percept_loss,
-                            physics_loss=physics_loss,
-                            render_loss=render_loss))
+    logger.log('Epoch: [{0}]\t'
+               'Perception Validation Loss {percept_loss:.4f}\t'
+               'Physics Validation Loss {physics_loss:.3f} \t'
+               'Rendering Validation Loss {render_loss:.4f}\t\t'.format(
+                        epoch + 1,
+                        percept_loss=percept_loss,
+                        physics_loss=physics_loss,
+                        render_loss=render_loss))
+
+    return percept_loss, physics_loss, render_loss
+
 
 if __name__ == '__main__':
     main()
